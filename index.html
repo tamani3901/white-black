@@ -2,81 +2,147 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>光マーカー通信 (修正版)</title>
+  <title>非接触データ通信 (超音波 / 光マーカー)</title>
   <style>
-    body { font-family: sans-serif; max-width: 640px; margin: 20px auto; padding: 15px; background: #f4f6f8; }
+    body { font-family: sans-serif; max-width: 680px; margin: 20px auto; padding: 15px; background: #f4f6f8; }
     .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    textarea { width: 100%; height: 50px; margin-bottom: 10px; font-size: 16px; box-sizing: border-box; }
-    button { padding: 10px 16px; font-size: 14px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; margin-right: 5px; }
-    button:disabled { background: #ccc; }
+    textarea { width: 100%; height: 60px; margin-bottom: 10px; box-sizing: border-box; font-size: 16px; }
+    button { padding: 12px 20px; font-size: 15px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; margin-right: 8px; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
     .btn-send { background: #28a745; }
     .btn-listen { background: #007bff; }
     .btn-cancel { background: #dc3545; }
-    select { padding: 8px; font-size: 14px; margin-bottom: 10px; }
-    .result { font-size: 22px; font-weight: bold; color: #007bff; padding: 10px; background: #e8f4ff; border-radius: 6px; text-align: center; margin-top: 10px; }
-    .log { font-family: monospace; font-size: 11px; background: #eee; padding: 8px; height: 120px; overflow-y: auto; margin-top: 10px; white-space: pre-wrap; }
+    select, input[type="checkbox"] { padding: 8px; font-size: 15px; border-radius: 6px; margin-bottom: 10px; margin-right: 10px; }
+    .status { margin-top: 10px; font-size: 14px; font-weight: bold; color: #d9534f; }
+    .result { font-size: 26px; font-weight: bold; color: #007bff; padding: 12px; background: #e8f4ff; border-radius: 6px; min-height: 36px; word-break: break-all; margin-top: 10px; text-align: center; }
+    .log { font-family: monospace; font-size: 11px; color: #333; background: #eee; padding: 8px; border-radius: 4px; margin-top: 10px; height: 180px; overflow-y: auto; white-space: pre-wrap; }
+    .mode-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+    .mode-group label { font-weight: bold; }
     
-    /* マーカー表示エリア */
+    /* 光通信用オーバーレイ */
     #txOverlay {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 9999;
+      background: rgba(0,0,0,0.9); display: none; justify-content: center; align-items: center; z-index: 9999;
     }
-    #marker { width: 250px; height: 250px; border: 4px solid red; background: black; }
-    .video-container { position: relative; width: 100%; max-width: 320px; margin: 0 auto; }
-    video { width: 100%; background: #000; }
+    #marker { width: 260px; height: 260px; border: 4px solid red; background: black; }
+    .video-container { position: relative; width: 240px; margin: 10px 0; display: none; }
+    video { width: 100%; background: #000; border-radius: 6px; }
     .target-box { position: absolute; top: 25%; left: 25%; width: 50%; height: 50%; border: 2px dashed red; pointer-events: none; }
   </style>
 </head>
 <body>
 
-  <h2>💡 光マーカー通信 (修正版)</h2>
+  <h2>📡 非接触データ通信 (詳細ログ完全復元版)</h2>
 
-  <div id="txOverlay">
-    <div style="text-align:center;">
-      <div id="marker"></div>
-      <p style="color:white; margin-top:10px;">タップで送信中止</p>
+  <div class="card">
+    <h3>通信方式選択</h3>
+    <div class="mode-group">
+      <label>物理メディア: </label>
+      <select id="mediaType" onchange="toggleMediaUI()">
+        <option value="ultrasonic">🦇 超音波通信 (18.5kHz〜19.5kHz)</option>
+        <option value="light">💡 光マーカー点滅 (画面中央)</option>
+      </select>
     </div>
   </div>
 
   <div class="card">
     <h3>1. 送信設定</h3>
-    <label>転送速度: </label>
-    <select id="txSpeed">
-      <option value="150">🛡️ 安定モード (150ms/bit)</option>
-      <option value="100" selected>🚀 通常モード (100ms/bit)</option>
-      <option value="60">⚡ 高速モード (60ms/bit)</option>
-    </select>
-    <textarea id="inputText" placeholder="送信文字">テスト</textarea>
-    <button class="btn-send" id="btnSend">💡 送信開始</button>
+    <div class="mode-group">
+      <label>送信モード: </label>
+      <select id="txMode">
+        <option value="accurate">🛡️ 正確モード (100ms×3)</option>
+        <option value="fast">⚡ 高速モード (60ms×2)</option>
+        <option value="turbo">🚀 正確高速モード (60ms×3)</option>
+      </select>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label><input type="checkbox" id="txHeaderBoost" checked> ヘッダーを強固にする (4回繰り返し)</label>
+    </div>
+    <textarea id="inputText" placeholder="送信文字列">こんにちは</textarea>
+    <div>
+      <button class="btn-send" id="btnSend">🚀 送信開始</button>
+    </div>
   </div>
 
   <div class="card">
     <h3>2. 受信設定</h3>
-    <label>受信速度設定: </label>
-    <select id="rxSpeed">
-      <option value="150">🛡️ 安定モード (150ms/bit)</option>
-      <option value="100" selected>🚀 通常モード (100ms/bit)</option>
-      <option value="60">⚡ 高速モード (60ms/bit)</option>
-    </select>
-    <div>
-      <button class="btn-listen" id="btnListen">📷 受信開始</button>
-      <button class="btn-cancel" id="btnCancel" disabled>⏹️ 停止</button>
+    <div class="mode-group">
+      <label>受信モード: </label>
+      <select id="rxMode">
+        <option value="accurate">🛡️ 正確モード (100ms×3)</option>
+        <option value="fast">⚡ 高速モード (60ms×2)</option>
+        <option value="turbo">🚀 正確高速モード (60ms×3)</option>
+      </select>
     </div>
-    <div class="video-container" style="margin-top:10px;">
+    <div style="margin-bottom:10px;">
+      <label><input type="checkbox" id="rxHeaderBoost" checked> ヘッダーを強固にする (4回繰り返し)</label>
+    </div>
+    <div>
+      <button class="btn-listen" id="btnListen">🎤 受信開始</button>
+      <button class="btn-cancel" id="btnCancel" disabled>⏹️ 受信キャンセル</button>
+    </div>
+
+    <!-- カメラ用表示エリア -->
+    <div class="video-container" id="videoArea">
       <video id="webcam" autoplay playsinline muted></video>
       <div class="target-box"></div>
     </div>
     <canvas id="canvas" style="display:none;"></canvas>
-    <div id="status" style="margin-top:5px; font-weight:bold;">待機中</div>
+
+    <div id="status" class="status">待機中</div>
     <div id="outputText" class="result">---</div>
     <div id="log" class="log">ログがここに表示されます</div>
   </div>
 
+  <!-- 光通信全画面表示 -->
+  <div id="txOverlay">
+    <div style="text-align:center;">
+      <div id="marker"></div>
+      <p style="color:white; margin-top:15px; font-weight:bold;">送信中... タップで中断</p>
+    </div>
+  </div>
+
 <script>
+// --- 周波数定義 (超音波帯域) ---
+const FREQ_0  = 18500;
+const FREQ_1  = 19000;
+const FREQ_ST = 19500;
+
+let audioCtx = null;
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.textContent += "\n" + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+// UI切替
+function toggleMediaUI() {
+  const type = document.getElementById('mediaType').value;
+  const btnListen = document.getElementById('btnListen');
+  const videoArea = document.getElementById('videoArea');
+  if (type === 'light') {
+    btnListen.textContent = "📷 カメラで受信開始";
+    videoArea.style.display = "block";
+  } else {
+    btnListen.textContent = "🎤 マイクで受信開始";
+    videoArea.style.display = "none";
+  }
+}
+
+// ---------- ハミング符号 (7,4) ----------
 function encodeHamming(d4) {
   const d = [(d4>>3)&1, (d4>>2)&1, (d4>>1)&1, d4&1];
-  return (d[0]<<6)|(d[1]<<5)|(d[2]<<4)|(d[3]<<3)|((d[0]^d[1]^d[3])<<2)|((d[0]^d[2]^d[3])<<1)|(d[1]^d[2]^d[3]);
+  const p1 = d[0] ^ d[1] ^ d[3];
+  const p2 = d[0] ^ d[2] ^ d[3];
+  const p3 = d[1] ^ d[2] ^ d[3];
+  return (d[0]<<6)|(d[1]<<5)|(d[2]<<4)|(d[3]<<3)|(p1<<2)|(p2<<1)|p3;
 }
+
 function decodeHamming(c7) {
   const b = [];
   for (let i = 6; i >= 0; i--) b.push((c7 >> i) & 1);
@@ -87,151 +153,379 @@ function decodeHamming(c7) {
   if (err >= 1 && err <= 7) b[err - 1] ^= 1;
   return (b[0]<<3) | (b[1]<<2) | (b[2]<<1) | b[3];
 }
-function byteTo14Bits(val) {
-  const h = encodeHamming((val >> 4) & 0x0F);
-  const l = encodeHamming(val & 0x0F);
+
+function encodeByteTo14Bits(byteVal) {
+  const high = encodeHamming((byteVal >> 4) & 0x0F);
+  const low  = encodeHamming(byteVal & 0x0F);
   let bits = [];
-  for (let i = 6; i >= 0; i--) bits.push((h >> i) & 1);
-  for (let i = 6; i >= 0; i--) bits.push((l >> i) & 1);
+  for (let i = 6; i >= 0; i--) bits.push((high >> i) & 1);
+  for (let i = 6; i >= 0; i--) bits.push((low >> i) & 1);
   return bits;
 }
 
-function log(msg) {
-  const el = document.getElementById('log');
-  el.textContent += "\n" + msg;
-  el.scrollTop = el.scrollHeight;
+// ---------- ビット生成 ----------
+function buildBits(text, mode, headerBoost) {
+  const bytes = new TextEncoder().encode(text);
+  let rawBits = [];
+
+  const isFast = (mode === 'fast' || mode === 'turbo');
+  const header = (isFast ? 1 : 0) << 7 | (bytes.length & 0x7F);
+  const headerBits = encodeByteTo14Bits(header);
+
+  let dataRepeat = (mode === 'fast') ? 2 : 3;
+  const headerRepeat = headerBoost ? 4 : dataRepeat;
+
+  for (let bit of headerBits) {
+    for (let i = 0; i < headerRepeat; i++) rawBits.push(bit);
+  }
+  for (let b of bytes) {
+    const dataBits = encodeByteTo14Bits(b);
+    for (let bit of dataBits) {
+      for (let i = 0; i < dataRepeat; i++) rawBits.push(bit);
+    }
+  }
+  return rawBits;
 }
 
-// --- 送信処理 ---
+// ---------- 送信処理 ----------
 let txInterval = null;
+
 document.getElementById('btnSend').onclick = () => {
+  const mediaType = document.getElementById('mediaType').value;
   const text = document.getElementById('inputText').value;
-  const speed = parseInt(document.getElementById('txSpeed').value);
+  const mode = document.getElementById('txMode').value;
+  const headerBoost = document.getElementById('txHeaderBoost').checked;
   if (!text) return;
 
-  const bytes = new TextEncoder().encode(text);
-  let bits = [];
-  
-  // スタートパルス (白長め: 400ms分)
-  const syncCount = Math.ceil(400 / speed);
-  for(let i=0; i<syncCount; i++) bits.push(1);
+  const bits = buildBits(text, mode, headerBoost);
+  let tBit = (mode === 'accurate') ? 0.100 : 0.060;
 
-  // ヘッダー(長さ) + データ
-  const headerBits = byteTo14Bits(bytes.length & 0x7F);
-  headerBits.forEach(b => bits.push(b));
-  bytes.forEach(b => byteTo14Bits(b).forEach(bit => bits.push(bit)));
+  if (mediaType === 'ultrasonic') {
+    // --- 超音波送信 ---
+    const ctx = getCtx();
+    const now = ctx.currentTime + 0.1;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
 
-  const overlay = document.getElementById('txOverlay');
-  const marker = document.getElementById('marker');
-  overlay.style.display = 'flex';
+    osc.frequency.setValueAtTime(FREQ_ST, now);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.3, now + 0.03);
 
-  let idx = 0;
-  txInterval = setInterval(() => {
-    if (idx >= bits.length) {
-      stopTx();
-      log('送信が正常終了しました');
-      return;
-    }
-    marker.style.background = bits[idx] === 1 ? 'white' : 'black';
-    idx++;
-  }, speed);
+    let t = now + 0.3;
+    bits.forEach((bit) => {
+      osc.frequency.setValueAtTime(bit === 1 ? FREQ_1 : FREQ_0, t);
+      t += tBit;
+    });
+
+    gain.gain.setValueAtTime(0.3, t - 0.02);
+    gain.gain.linearRampToValueAtTime(0, t);
+
+    osc.start(now);
+    osc.stop(t);
+    log(`超音波送信: "${text}" (${bits.length}ビット)`);
+  } else {
+    // --- 光マーカー送信 ---
+    const overlay = document.getElementById('txOverlay');
+    const marker = document.getElementById('marker');
+    overlay.style.display = 'flex';
+
+    // 同期用スタート信号（白固定 400ms）
+    marker.style.background = 'white';
+    let idx = -Math.ceil(400 / (tBit * 1000));
+
+    txInterval = setInterval(() => {
+      if (idx < 0) {
+        marker.style.background = 'white';
+      } else if (idx < bits.length) {
+        marker.style.background = bits[idx] === 1 ? 'white' : 'black';
+      } else {
+        clearInterval(txInterval);
+        txInterval = null;
+        overlay.style.display = 'none';
+        log('光送信完了');
+      }
+      idx++;
+    }, tBit * 1000);
+  }
 };
 
-function stopTx() {
+document.getElementById('txOverlay').onclick = () => {
   if (txInterval) { clearInterval(txInterval); txInterval = null; }
   document.getElementById('txOverlay').style.display = 'none';
-}
-document.getElementById('txOverlay').onclick = stopTx;
-
-// --- 受信処理 ---
-let rxInterval = null;
-let stream = null;
-
-function stopRx() {
-  if (rxInterval) { clearInterval(rxInterval); rxInterval = null; }
-  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  document.getElementById('btnListen').disabled = false;
-  document.getElementById('btnCancel').disabled = true;
-  document.getElementById('status').textContent = '⏹️ 停止しました';
-}
-
-document.getElementById('btnCancel').onclick = stopRx;
-
-document.getElementById('btnListen').onclick = async () => {
-  const speed = parseInt(document.getElementById('rxSpeed').value);
-  const video = document.getElementById('webcam');
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = stream;
-  } catch(e) {
-    log('カメラエラー: ' + e.message);
-    return;
-  }
-
-  document.getElementById('btnListen').disabled = true;
-  document.getElementById('btnCancel').disabled = false;
-
-  let bitStream = [];
-  let state = 'idle';
-  let minL = 255, maxL = 0;
-
-  // チェック間隔は設定スピードの1/2
-  rxInterval = setInterval(() => {
-    if (video.videoWidth === 0) return;
-    canvas.width = 160; canvas.height = 120;
-    ctx.drawImage(video, 0, 0, 160, 120);
-
-    // 中央の点線枠エリアのみ輝度計算
-    const imgData = ctx.getImageData(40, 30, 80, 60).data;
-    let totalL = 0;
-    for (let i = 0; i < imgData.length; i += 4) {
-      totalL += (0.299*imgData[i] + 0.587*imgData[i+1] + 0.114*imgData[i+2]);
-    }
-    const avgL = totalL / (imgData.length / 4);
-
-    if (avgL < minL) minL = avgL;
-    if (avgL > maxL) maxL = avgL;
-    const th = (minL + maxL) / 2;
-    const bit = avgL > th ? 1 : 0;
-
-    if (state === 'idle') {
-      if (avgL > th && (maxL - minL > 20)) {
-        state = 'rx';
-        bitStream = [];
-        log('光同期信号を検出');
-      }
-    } else if (state === 'rx') {
-      bitStream.push(bit);
-      document.getElementById('status').textContent = `受信中: ${bitStream.length} ビット`;
-
-      // 14bit単位で復号
-      if (bitStream.length >= 14) {
-        const len = decodeByte(bitStream.slice(0, 14));
-        const total = (1 + len) * 14;
-        if (len > 0 && bitStream.length >= total) {
-          let bytes = [];
-          for(let i=1; i<=len; i++) {
-            bytes.push(decodeByte(bitStream.slice(i*14, (i+1)*14)));
-          }
-          const text = new TextDecoder().decode(new Uint8Array(bytes));
-          document.getElementById('outputText').textContent = text;
-          log('✅ 復元完了: ' + text);
-          stopRx();
-        }
-      }
-    }
-  }, speed / 2);
+  log('⚠️ 光送信キャンセル');
 };
 
-function decodeByte(bits14) {
-  if (bits14.length < 14) return 0;
-  const h = bits14.slice(0, 7).reduce((acc, b) => (acc << 1) | b, 0);
-  const l = bits14.slice(7, 14).reduce((acc, b) => (acc << 1) | b, 0);
-  return (decodeHamming(h) << 4) | decodeHamming(l);
+// ---------- 受信処理 ----------
+let receiveLoopId = null;
+let mediaStream = null;
+let isReceiving = false;
+
+function stopReceive(msg = '⏹️ 受信停止しました') {
+  if (receiveLoopId) {
+    clearInterval(receiveLoopId);
+    receiveLoopId = null;
+  }
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
+  isReceiving = false;
+  document.getElementById('btnListen').disabled = false;
+  document.getElementById('btnCancel').disabled = true;
+  document.getElementById('status').textContent = msg;
 }
+
+document.getElementById('btnCancel').onclick = () => {
+  log('⚠️ ユーザーにより受信キャンセル');
+  stopReceive('⏹️ 受信キャンセルされました');
+};
+
+document.getElementById('btnListen').onclick = async () => {
+  const mediaType = document.getElementById('mediaType').value;
+  const rxMode = document.getElementById('rxMode').value;
+  const headerBoost = document.getElementById('rxHeaderBoost').checked;
+  
+  const status = document.getElementById('status');
+  const logEl = document.getElementById('log');
+  const output = document.getElementById('outputText');
+
+  if (isReceiving) stopReceive();
+
+  logEl.textContent = "--- 受信ログ開始 ---";
+  output.textContent = "---";
+  document.getElementById('btnListen').disabled = true;
+  document.getElementById('btnCancel').disabled = false;
+  status.textContent = "起動中...";
+
+  let tBitMs = (rxMode === 'accurate') ? 100 : 60;
+  let dataRepeat = (rxMode === 'fast') ? 2 : 3;
+  let headerRepeat = headerBoost ? 4 : dataRepeat;
+
+  isReceiving = true;
+
+  if (mediaType === 'ultrasonic') {
+    // === 超音波受信 ===
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+    } catch(e) {
+      log('❌ マイクアクセス拒否: ' + e.message);
+      stopReceive('❌ マイクエラー');
+      return;
+    }
+
+    const ctx = getCtx();
+    const source = ctx.createMediaStreamSource(mediaStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+
+    const binSize = ctx.sampleRate / analyser.fftSize;
+    const b0  = Math.round(FREQ_0 / binSize);
+    const b1  = Math.round(FREQ_1 / binSize);
+    const bST = Math.round(FREQ_ST / binSize);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    let state = 'idle';
+    let bitStream = [];
+    let samples = [];
+    let headerDecoded = false;
+    let totalBits = 0;
+
+    receiveLoopId = setInterval(() => {
+      analyser.getByteFrequencyData(data);
+      const p0 = data[b0], p1 = data[b1], pST = data[bST];
+
+      if (state === 'idle') {
+        if (pST > 40) {
+          state = 'receiving';
+          bitStream = [];
+          samples = [];
+          headerDecoded = false;
+          status.textContent = '📡 パイロット音検出！ データ受信中...';
+          log('パイロット音 (19.5kHz) 検出');
+        }
+        return;
+      }
+
+      if (state === 'receiving') {
+        samples.push(p1 > p0 ? 1 : 0);
+
+        if (samples.length >= 3) {
+          const bit = (samples.reduce((a,b)=>a+b, 0) >= 2) ? 1 : 0;
+          bitStream.push(bit);
+          samples = [];
+
+          if (!headerDecoded) {
+            status.textContent = `📥 受信中... ${bitStream.length} ビット`;
+            if (bitStream.length >= 14 * headerRepeat) {
+              const headerRaw = bitStream.slice(0, 14 * headerRepeat);
+              const headerByte = decodeBitsToByte(headerRaw, headerRepeat);
+              const dataLen = headerByte & 0x7F;
+
+              if (dataLen > 200 || dataLen === 0) {
+                log(`❌ 異常なデータ長(${dataLen})を検出。受信リセット`);
+                state = 'idle';
+                return;
+              }
+              totalBits = (14 * headerRepeat) + (dataLen * 14 * dataRepeat);
+              headerDecoded = true;
+              log(`ヘッダー復号成功: データ長=${dataLen}バイト, 総ビット数=${totalBits}`);
+            }
+          } else {
+            status.textContent = `📥 受信中... (${bitStream.length}/${totalBits} ビット)`;
+            if (bitStream.length >= totalBits) {
+              log(`受信完了 (${bitStream.length} ビット)`);
+              decodeStreamWithHeader(bitStream.slice(0, totalBits), headerRepeat, dataRepeat);
+              stopReceive('✅ 受信完了');
+            }
+          }
+        }
+      }
+    }, tBitMs / 3);
+
+  } else {
+    // === 光マーカー受信 ===
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('canvas');
+    const ctx2d = canvas.getContext('2d');
+
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = mediaStream;
+    } catch(e) {
+      log('❌ カメラアクセス拒否: ' + e.message);
+      stopReceive('❌ カメラエラー');
+      return;
+    }
+
+    let state = 'idle';
+    let bitStream = [];
+    let samples = [];
+    let headerDecoded = false;
+    let totalBits = 0;
+    let minL = 255, maxL = 0;
+
+    receiveLoopId = setInterval(() => {
+      if (video.videoWidth === 0) return;
+      canvas.width = 160; canvas.height = 120;
+      ctx2d.drawImage(video, 0, 0, 160, 120);
+
+      // 中央領域の輝度平均
+      const imgData = ctx2d.getImageData(40, 30, 80, 60).data;
+      let totalL = 0;
+      for (let i = 0; i < imgData.length; i += 4) {
+        totalL += (0.299 * imgData[i] + 0.587 * imgData[i+1] + 0.114 * imgData[i+2]);
+      }
+      const avgL = totalL / (imgData.length / 4);
+
+      if (avgL < minL) minL = avgL;
+      if (avgL > maxL) maxL = avgL;
+      const th = (minL + maxL) / 2;
+      const rawBit = avgL > th ? 1 : 0;
+
+      if (state === 'idle') {
+        if (avgL > th && (maxL - minL > 30)) {
+          state = 'receiving';
+          bitStream = [];
+          samples = [];
+          headerDecoded = false;
+          status.textContent = '💡 光同期検知！ データ受信中...';
+          log('光同期信号を検出');
+        }
+        return;
+      }
+
+      if (state === 'receiving') {
+        samples.push(rawBit);
+
+        if (samples.length >= 2) {
+          const bit = (samples.reduce((a,b)=>a+b, 0) >= 1) ? 1 : 0;
+          bitStream.push(bit);
+          samples = [];
+
+          if (!headerDecoded) {
+            status.textContent = `📥 受信中... ${bitStream.length} ビット`;
+            if (bitStream.length >= 14 * headerRepeat) {
+              const headerRaw = bitStream.slice(0, 14 * headerRepeat);
+              const headerByte = decodeBitsToByte(headerRaw, headerRepeat);
+              const dataLen = headerByte & 0x7F;
+
+              if (dataLen > 200 || dataLen === 0) {
+                log(`❌ 異常データ長(${dataLen})。リセット`);
+                state = 'idle';
+                return;
+              }
+              totalBits = (14 * headerRepeat) + (dataLen * 14 * dataRepeat);
+              headerDecoded = true;
+              log(`ヘッダー復号成功: データ長=${dataLen}バイト, 総ビット数=${totalBits}`);
+            }
+          } else {
+            status.textContent = `📥 受信中... (${bitStream.length}/${totalBits} ビット)`;
+            if (bitStream.length >= totalBits) {
+              log(`受信完了 (${bitStream.length} ビット)`);
+              decodeStreamWithHeader(bitStream.slice(0, totalBits), headerRepeat, dataRepeat);
+              stopReceive('✅ 受信完了');
+            }
+          }
+        }
+      }
+    }, tBitMs / 2);
+  }
+};
+
+// ---------- デコード処理 ----------
+function decodeBitsToByte(rawBits, repeat) {
+  let voted = [];
+  for (let i = 0; i < rawBits.length; i += repeat) {
+    let sum = 0;
+    for (let j = 0; j < repeat; j++) {
+      sum += (i + j < rawBits.length) ? rawBits[i + j] : 0;
+    }
+    voted.push(sum >= repeat/2 ? 1 : 0);
+  }
+  if (voted.length < 14) return 0;
+  const highCode = voted.slice(0, 7).reduce((acc, b) => (acc << 1) | b, 0);
+  const lowCode  = voted.slice(7, 14).reduce((acc, b) => (acc << 1) | b, 0);
+  return (decodeHamming(highCode) << 4) | decodeHamming(lowCode);
+}
+
+function decodeStreamWithHeader(bitStream, headerRepeat, dataRepeat) {
+  const output = document.getElementById('outputText');
+  const headerBitsLen = 14 * headerRepeat;
+  const dataBitsPerByte = 14 * dataRepeat;
+
+  const headerRaw = bitStream.slice(0, headerBitsLen);
+  const headerByte = decodeBitsToByte(headerRaw, headerRepeat);
+  const dataLen = headerByte & 0x7F;
+
+  let bytes = [];
+  for (let i = 0; i < dataLen; i++) {
+    const offset = headerBitsLen + i * dataBitsPerByte;
+    if (offset + dataBitsPerByte > bitStream.length) break;
+    const raw = bitStream.slice(offset, offset + dataBitsPerByte);
+    bytes.push(decodeBitsToByte(raw, dataRepeat));
+  }
+
+  const hexStr = bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+  log(`受信バイト列 (Hex): ${hexStr}`);
+
+  try {
+    const text = new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+    log(`✅ 復元成功: "${text}"`);
+    output.textContent = text || "(空文字列)";
+  } catch(e) {
+    log(`❌ デコードエラー: ${e.message}`);
+    output.textContent = "デコードエラー";
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  if (isReceiving) stopReceive();
+});
 </script>
 </body>
 </html>
