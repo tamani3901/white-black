@@ -2,59 +2,77 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>可視光データ通信 (画面点滅 / 輝度判定)</title>
+  <title>光マーカー通信 (修正版)</title>
   <style>
     body { font-family: sans-serif; max-width: 640px; margin: 20px auto; padding: 15px; background: #f4f6f8; }
     .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    textarea { width: 100%; height: 60px; margin-bottom: 10px; box-sizing: border-box; font-size: 16px; }
-    button { padding: 12px 20px; font-size: 15px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; margin-right: 8px; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
+    textarea { width: 100%; height: 50px; margin-bottom: 10px; font-size: 16px; box-sizing: border-box; }
+    button { padding: 10px 16px; font-size: 14px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; margin-right: 5px; }
+    button:disabled { background: #ccc; }
     .btn-send { background: #28a745; }
     .btn-listen { background: #007bff; }
     .btn-cancel { background: #dc3545; }
-    select, input[type="checkbox"] { padding: 10px; font-size: 15px; border-radius: 6px; margin-bottom: 10px; }
-    .result { font-size: 26px; font-weight: bold; color: #007bff; padding: 12px; background: #e8f4ff; border-radius: 6px; min-height: 36px; word-break: break-all; margin-top: 10px; text-align: center; }
-    .log { font-family: monospace; font-size: 11px; color: #333; background: #eee; padding: 8px; border-radius: 4px; margin-top: 10px; height: 160px; overflow-y: auto; white-space: pre-wrap; }
+    select { padding: 8px; font-size: 14px; margin-bottom: 10px; }
+    .result { font-size: 22px; font-weight: bold; color: #007bff; padding: 10px; background: #e8f4ff; border-radius: 6px; text-align: center; margin-top: 10px; }
+    .log { font-family: monospace; font-size: 11px; background: #eee; padding: 8px; height: 120px; overflow-y: auto; margin-top: 10px; white-space: pre-wrap; }
     
-    /* 発信画面パネル */
-    #txPanel {
+    /* マーカー表示エリア */
+    #txOverlay {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: black; display: none; z-index: 9999;
-      justify-content: center; align-items: center; color: gray; font-size: 20px;
+      background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 9999;
     }
-    video { width: 100%; max-height: 240px; background: #000; border-radius: 6px; margin-top: 10px; }
+    #marker { width: 250px; height: 250px; border: 4px solid red; background: black; }
+    .video-container { position: relative; width: 100%; max-width: 320px; margin: 0 auto; }
+    video { width: 100%; background: #000; }
+    .target-box { position: absolute; top: 25%; left: 25%; width: 50%; height: 50%; border: 2px dashed red; pointer-events: none; }
   </style>
 </head>
 <body>
 
-  <h2>💡 可視光データ通信 (輝度判定)</h2>
+  <h2>💡 光マーカー通信 (修正版)</h2>
 
-  <!-- 全画面点滅用パネル -->
-  <div id="txPanel">クリック/タップで送信中断</div>
-
-  <div class="card">
-    <h3>1. 送信設定</h3>
-    <textarea id="inputText" placeholder="送信文字">こんにちは</textarea>
-    <div>
-      <button class="btn-send" id="btnPlay">💡 光で送信 (全画面点滅)</button>
+  <div id="txOverlay">
+    <div style="text-align:center;">
+      <div id="marker"></div>
+      <p style="color:white; margin-top:10px;">タップで送信中止</p>
     </div>
   </div>
 
   <div class="card">
-    <h3>2. 受信設定 (カメラ)</h3>
-    <div class="btn-group">
-      <button class="btn-listen" id="btnListen">📷 カメラで受信開始</button>
-      <button class="btn-cancel" id="btnCancel" disabled>⏹️ キャンセル</button>
+    <h3>1. 送信設定</h3>
+    <label>転送速度: </label>
+    <select id="txSpeed">
+      <option value="150">🛡️ 安定モード (150ms/bit)</option>
+      <option value="100" selected>🚀 通常モード (100ms/bit)</option>
+      <option value="60">⚡ 高速モード (60ms/bit)</option>
+    </select>
+    <textarea id="inputText" placeholder="送信文字">テスト</textarea>
+    <button class="btn-send" id="btnSend">💡 送信開始</button>
+  </div>
+
+  <div class="card">
+    <h3>2. 受信設定</h3>
+    <label>受信速度設定: </label>
+    <select id="rxSpeed">
+      <option value="150">🛡️ 安定モード (150ms/bit)</option>
+      <option value="100" selected>🚀 通常モード (100ms/bit)</option>
+      <option value="60">⚡ 高速モード (60ms/bit)</option>
+    </select>
+    <div>
+      <button class="btn-listen" id="btnListen">📷 受信開始</button>
+      <button class="btn-cancel" id="btnCancel" disabled>⏹️ 停止</button>
     </div>
-    <video id="webcam" autoplay playsinline muted></video>
+    <div class="video-container" style="margin-top:10px;">
+      <video id="webcam" autoplay playsinline muted></video>
+      <div class="target-box"></div>
+    </div>
     <canvas id="canvas" style="display:none;"></canvas>
-    <div id="status" style="margin-top:10px; font-weight:bold;">待機中</div>
+    <div id="status" style="margin-top:5px; font-weight:bold;">待機中</div>
     <div id="outputText" class="result">---</div>
     <div id="log" class="log">ログがここに表示されます</div>
   </div>
 
 <script>
-// ハミング符号 (7,4)
 function encodeHamming(d4) {
   const d = [(d4>>3)&1, (d4>>2)&1, (d4>>1)&1, d4&1];
   return (d[0]<<6)|(d[1]<<5)|(d[2]<<4)|(d[3]<<3)|((d[0]^d[1]^d[3])<<2)|((d[0]^d[2]^d[3])<<1)|(d[1]^d[2]^d[3]);
@@ -69,12 +87,12 @@ function decodeHamming(c7) {
   if (err >= 1 && err <= 7) b[err - 1] ^= 1;
   return (b[0]<<3) | (b[1]<<2) | (b[2]<<1) | b[3];
 }
-function encodeByteTo14Bits(byteVal) {
-  const high = encodeHamming((byteVal >> 4) & 0x0F);
-  const low  = encodeHamming(byteVal & 0x0F);
+function byteTo14Bits(val) {
+  const h = encodeHamming((val >> 4) & 0x0F);
+  const l = encodeHamming(val & 0x0F);
   let bits = [];
-  for (let i = 6; i >= 0; i--) bits.push((high >> i) & 1);
-  for (let i = 6; i >= 0; i--) bits.push((low >> i) & 1);
+  for (let i = 6; i >= 0; i--) bits.push((h >> i) & 1);
+  for (let i = 6; i >= 0; i--) bits.push((l >> i) & 1);
   return bits;
 }
 
@@ -84,162 +102,136 @@ function log(msg) {
   el.scrollTop = el.scrollHeight;
 }
 
-// 送信ロジック
-let txTimer = null;
-const T_BIT_MS = 100; // 1bitあたり100ms
-
-document.getElementById('btnPlay').onclick = () => {
+// --- 送信処理 ---
+let txInterval = null;
+document.getElementById('btnSend').onclick = () => {
   const text = document.getElementById('inputText').value;
+  const speed = parseInt(document.getElementById('txSpeed').value);
   if (!text) return;
 
   const bytes = new TextEncoder().encode(text);
   let bits = [];
+  
+  // スタートパルス (白長め: 400ms分)
+  const syncCount = Math.ceil(400 / speed);
+  for(let i=0; i<syncCount; i++) bits.push(1);
 
-  // パイロット信号（同期用：赤/緑や点滅ではなく長めの白表示）
-  // ヘッダー: データ長 (1byte -> 14bit)
-  const headerBits = encodeByteTo14Bits(bytes.length & 0x7F);
-  headerBits.forEach(b => { bits.push(b); bits.push(b); bits.push(b); }); // 3回重複
+  // ヘッダー(長さ) + データ
+  const headerBits = byteTo14Bits(bytes.length & 0x7F);
+  headerBits.forEach(b => bits.push(b));
+  bytes.forEach(b => byteTo14Bits(b).forEach(bit => bits.push(bit)));
 
-  bytes.forEach(b => {
-    const dataBits = encodeByteTo14Bits(b);
-    dataBits.forEach(bit => { bits.push(bit); bits.push(bit); bits.push(bit); });
-  });
+  const overlay = document.getElementById('txOverlay');
+  const marker = document.getElementById('marker');
+  overlay.style.display = 'flex';
 
-  const panel = document.getElementById('txPanel');
-  panel.style.display = 'flex';
-
-  let idx = -5; // パイロット信号として最初の500msは常時「白」にする
-  txTimer = setInterval(() => {
-    if (idx < 0) {
-      panel.style.background = 'white';
-    } else if (idx < bits.length) {
-      panel.style.background = bits[idx] === 1 ? 'white' : 'black';
-    } else {
-      clearInterval(txTimer);
-      panel.style.display = 'none';
-      log('送信完了');
+  let idx = 0;
+  txInterval = setInterval(() => {
+    if (idx >= bits.length) {
+      stopTx();
+      log('送信が正常終了しました');
+      return;
     }
+    marker.style.background = bits[idx] === 1 ? 'white' : 'black';
     idx++;
-  }, T_BIT_MS);
+  }, speed);
 };
 
-document.getElementById('txPanel').onclick = () => {
-  if (txTimer) clearInterval(txTimer);
-  document.getElementById('txPanel').style.display = 'none';
-};
+function stopTx() {
+  if (txInterval) { clearInterval(txInterval); txInterval = null; }
+  document.getElementById('txOverlay').style.display = 'none';
+}
+document.getElementById('txOverlay').onclick = stopTx;
 
-// 受信ロジック (輝度計測)
-let isReceiving = false;
-let rxLoop = null;
-let mediaStream = null;
+// --- 受信処理 ---
+let rxInterval = null;
+let stream = null;
+
+function stopRx() {
+  if (rxInterval) { clearInterval(rxInterval); rxInterval = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById('btnListen').disabled = false;
+  document.getElementById('btnCancel').disabled = true;
+  document.getElementById('status').textContent = '⏹️ 停止しました';
+}
+
+document.getElementById('btnCancel').onclick = stopRx;
 
 document.getElementById('btnListen').onclick = async () => {
+  const speed = parseInt(document.getElementById('rxSpeed').value);
   const video = document.getElementById('webcam');
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
 
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = mediaStream;
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = stream;
   } catch(e) {
     log('カメラエラー: ' + e.message);
     return;
   }
 
-  isReceiving = true;
   document.getElementById('btnListen').disabled = true;
   document.getElementById('btnCancel').disabled = false;
 
-  let state = 'idle';
   let bitStream = [];
-  let samples = [];
-  let lastTime = Date.now();
-  
-  // 動的閾値計算（環境光に合わせる）
-  let minLuma = 255, maxLuma = 0;
+  let state = 'idle';
+  let minL = 255, maxL = 0;
 
-  rxLoop = setInterval(() => {
+  // チェック間隔は設定スピードの1/2
+  rxInterval = setInterval(() => {
     if (video.videoWidth === 0) return;
-    canvas.width = 80; canvas.height = 60; // 軽量化のため縮小して描画
-    ctx.drawImage(video, 0, 0, 80, 60);
-    const imgData = ctx.getImageData(0, 0, 80, 60).data;
-    
-    // 全画素の輝度 (Luminance) 平均値を算出
-    let totalLuma = 0;
+    canvas.width = 160; canvas.height = 120;
+    ctx.drawImage(video, 0, 0, 160, 120);
+
+    // 中央の点線枠エリアのみ輝度計算
+    const imgData = ctx.getImageData(40, 30, 80, 60).data;
+    let totalL = 0;
     for (let i = 0; i < imgData.length; i += 4) {
-      totalLuma += (0.299 * imgData[i] + 0.587 * imgData[i+1] + 0.114 * imgData[i+2]);
+      totalL += (0.299*imgData[i] + 0.587*imgData[i+1] + 0.114*imgData[i+2]);
     }
-    const avgLuma = totalLuma / (imgData.length / 4);
+    const avgL = totalL / (imgData.length / 4);
 
-    if (avgLuma < minLuma) minLuma = avgLuma;
-    if (avgLuma > maxLuma) maxLuma = avgLuma;
-    const threshold = (minLuma + maxLuma) / 2;
-
-    const currentBit = avgLuma > threshold ? 1 : 0;
+    if (avgL < minL) minL = avgL;
+    if (avgL > maxL) maxL = avgL;
+    const th = (minL + maxL) / 2;
+    const bit = avgL > th ? 1 : 0;
 
     if (state === 'idle') {
-      if (avgLuma > threshold && (maxLuma - minLuma > 30)) { // 明白な明暗差を検知
-        state = 'receiving';
+      if (avgL > th && (maxL - minL > 20)) {
+        state = 'rx';
         bitStream = [];
-        samples = [];
-        log('光同期信号を検出。受信開始...');
+        log('光同期信号を検出');
       }
-    } else if (state === 'receiving') {
-      samples.push(currentBit);
-      
-      // 一定時間（300ms）ごとに多数決でビット判定
-      if (samples.length >= 3) {
-        const sum = samples.reduce((a,b) => a+b, 0);
-        const bit = sum >= 2 ? 1 : 0;
-        bitStream.push(bit);
-        samples = [];
-        
-        document.getElementById('status').textContent = `受信中... ${bitStream.length} bits`;
+    } else if (state === 'rx') {
+      bitStream.push(bit);
+      document.getElementById('status').textContent = `受信中: ${bitStream.length} ビット`;
 
-        // 簡易デコードチェック
-        if (bitStream.length >= 14 * 3) {
-          const lenByte = decodeBits(bitStream.slice(0, 42));
-          const totalBits = (1 + lenByte) * 42;
-          
-          if (bitStream.length >= totalBits) {
-            decodeAll(bitStream, lenByte);
-            stopRx();
+      // 14bit単位で復号
+      if (bitStream.length >= 14) {
+        const len = decodeByte(bitStream.slice(0, 14));
+        const total = (1 + len) * 14;
+        if (len > 0 && bitStream.length >= total) {
+          let bytes = [];
+          for(let i=1; i<=len; i++) {
+            bytes.push(decodeByte(bitStream.slice(i*14, (i+1)*14)));
           }
+          const text = new TextDecoder().decode(new Uint8Array(bytes));
+          document.getElementById('outputText').textContent = text;
+          log('✅ 復元完了: ' + text);
+          stopRx();
         }
       }
     }
-  }, T_BIT_MS / 3);
+  }, speed / 2);
 };
 
-function decodeBits(bits42) {
-  let voted = [];
-  for (let i = 0; i < bits42.length; i += 3) {
-    voted.push((bits42[i] + bits42[i+1] + bits42[i+2]) >= 2 ? 1 : 0);
-  }
-  const high = voted.slice(0, 7).reduce((acc, b) => (acc << 1) | b, 0);
-  const low = voted.slice(7, 14).reduce((acc, b) => (acc << 1) | b, 0);
-  return (decodeHamming(high) << 4) | decodeHamming(low);
+function decodeByte(bits14) {
+  if (bits14.length < 14) return 0;
+  const h = bits14.slice(0, 7).reduce((acc, b) => (acc << 1) | b, 0);
+  const l = bits14.slice(7, 14).reduce((acc, b) => (acc << 1) | b, 0);
+  return (decodeHamming(h) << 4) | decodeHamming(l);
 }
-
-function decodeAll(bitStream, len) {
-  let bytes = [];
-  for (let i = 1; i <= len; i++) {
-    const chunk = bitStream.slice(i * 42, (i + 1) * 42);
-    if (chunk.length < 42) break;
-    bytes.push(decodeBits(chunk));
-  }
-  const text = new TextDecoder().decode(new Uint8Array(bytes));
-  document.getElementById('outputText').textContent = text;
-  log(`復元成功: "${text}"`);
-}
-
-function stopRx() {
-  if (rxLoop) clearInterval(rxLoop);
-  if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-  document.getElementById('btnListen').disabled = false;
-  document.getElementById('btnCancel').disabled = true;
-}
-document.getElementById('btnCancel').onclick = stopRx;
 </script>
 </body>
 </html>
